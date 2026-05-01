@@ -1902,10 +1902,37 @@
   const success = document.getElementById('successMsg');
   const hint = document.getElementById('hintText');
 
+  const RATE_KEY = 'nm_contact_sends';
+  const RATE_LIMIT = 2;
+  const RATE_WINDOW = 2 * 60 * 60 * 1000; // 2 horas en ms
+
+  function getRateSends() {
+    try { return JSON.parse(localStorage.getItem(RATE_KEY) || '[]'); } catch { return []; }
+  }
+  function checkRateLimit() {
+    const now = Date.now();
+    const sends = getRateSends().filter(t => now - t < RATE_WINDOW);
+    localStorage.setItem(RATE_KEY, JSON.stringify(sends));
+    return sends;
+  }
+  function registerSend() {
+    const sends = checkRateLimit();
+    sends.push(Date.now());
+    localStorage.setItem(RATE_KEY, JSON.stringify(sends));
+  }
+
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (!form.checkValidity()) {
       hint.textContent = '⚠ completa todos los campos';
+      hint.style.color = 'var(--coral)';
+      return;
+    }
+    const sends = checkRateLimit();
+    if (sends.length >= RATE_LIMIT) {
+      const waitMs = RATE_WINDOW - (Date.now() - sends[0]);
+      const waitMin = Math.ceil(waitMs / 60000);
+      hint.textContent = `⚠ límite alcanzado · intenta en ${waitMin} min`;
       hint.style.color = 'var(--coral)';
       return;
     }
@@ -1920,6 +1947,7 @@
         headers: { 'Accept': 'application/json' }
       });
       if (res.ok) {
+        registerSend();
         success.classList.add('show');
         btn.style.display = 'none';
         hint.textContent = 'Recibido — gracias';
